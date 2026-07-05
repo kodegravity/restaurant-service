@@ -1,0 +1,46 @@
+{
+  "family": "restaurant-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn":      "arn:aws:iam::YOUR_ACCOUNT_ID:role/restaurant-service-task-role",
+  "containerDefinitions": [
+    {
+      "name": "restaurant-service",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ca-central-1.amazonaws.com/restaurant-service:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8082,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "DB_PORT", "value": "5432" },
+        { "name": "DB_NAME", "value": "restaurant_db" }
+      ],
+      "secrets": [
+        { "name": "DB_HOST",     "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/db-host" },
+        { "name": "DB_USERNAME", "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/db-username" },
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/db-password" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group":         "/ecs/restaurant-service",
+          "awslogs-region":        "ca-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

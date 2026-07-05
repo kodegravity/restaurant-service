@@ -1,9 +1,16 @@
 package io.codeqube.restaurantservice.dto;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import java.util.List;
 
 public class OrderRequest {
+
+    @NotNull(message = "Table ID is required")
     private Long tableId;
+
+    @NotEmpty(message = "Order must contain at least one item")
+    @Valid
     private List<OrderItemRequest> items;
 
     public Long getTableId() { return tableId; }
@@ -13,7 +20,13 @@ public class OrderRequest {
     public void setItems(List<OrderItemRequest> items) { this.items = items; }
 
     public static class OrderItemRequest {
+
+        @NotNull(message = "Menu item ID is required")
         private Long menuItemId;
+
+        @NotNull(message = "Quantity is required")
+        @Min(value = 1, message = "Quantity must be at least 1")
+        @Max(value = 99, message = "Quantity must not exceed 99")
         private Integer quantity;
 
         public Long getMenuItemId() { return menuItemId; }

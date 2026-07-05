@@ -1,12 +1,26 @@
 package io.codeqube.restaurantservice.dto;
 
+import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 
 public class MenuItemRequest {
+
+    @NotBlank(message = "Name is required")
+    @Size(max = 100, message = "Name must not exceed 100 characters")
     private String name;
+
+    @Size(max = 500, message = "Description must not exceed 500 characters")
     private String description;
+
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.01", message = "Price must be greater than 0")
+    @Digits(integer = 8, fraction = 2, message = "Price must have at most 2 decimal places")
     private BigDecimal price;
+
+    @NotBlank(message = "Category is required")
+    @Size(max = 50, message = "Category must not exceed 50 characters")
     private String category;
+
     private boolean available = true;
 
     public String getName() { return name; }

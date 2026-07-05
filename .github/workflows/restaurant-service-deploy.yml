@@ -1,0 +1,144 @@
+name: restaurant-service – Build & Deploy
+
+# ─── Triggers ──────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "restaurant-service/**"   # only run when this service's files change
+  workflow_dispatch:              # allow manual runs from the Actions UI
+
+# ─── Permissions (GitHub OIDC → AWS) ───────────────────────────────────────────
+# id-token: write  → lets the runner request a short-lived OIDC JWT from GitHub
+# contents: read   → needed by actions/checkout
+permissions:
+  id-token: write
+  contents: read
+
+# ─── Top-level env (non-secret, reused across steps) ───────────────────────────
+env:
+  AWS_REGION:         ${{ vars.AWS_REGION }}
+  AWS_ACCOUNT_ID:     ${{ vars.AWS_ACCOUNT_ID }}
+  ECR_REPOSITORY:     restaurant-service
+  ECS_CLUSTER:        food-delivery-dev-cluster
+  ECS_SERVICE:        restaurant-service
+  CONTAINER_NAME:     restaurant-service
+  TASK_DEF_FILE:      restaurant-service/ecs-task-definition.json
+
+jobs:
+  build-and-deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────────
+      # Fetches the full repo at the commit that triggered the workflow.
+      # sparse-checkout is not used so the Dockerfile and pom.xml are both available.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Java 17 ──────────────────────────────────────────────────────
+      # Installs the Eclipse Temurin JDK 17 (same vendor used in the Docker image)
+      # and configures Maven settings so the cache step works correctly.
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: maven               # built-in shorthand; equivalent to actions/cache on ~/.m2
+
+      # ── 3. Cache Maven dependencies ────────────────────────────────────────────
+      # setup-java@v4's built-in cache handles ~/.m2/repository.
+      # This explicit step caches the wrapper and settings for extra speed.
+      - name: Cache Maven wrapper
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            restaurant-service/.mvn/wrapper
+          key: ${{ runner.os }}-maven-${{ hashFiles('restaurant-service/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      # ── 4. Run tests ───────────────────────────────────────────────────────────
+      # Runs the full test suite. Fails fast: if tests fail, the image is never built.
+      # -B (batch mode) suppresses download progress bars in CI logs.
+      - name: Run Maven tests
+        working-directory: restaurant-service
+        run: mvn test -B --no-transfer-progress
+
+      # ── 5. Build JAR ───────────────────────────────────────────────────────────
+      # Produces the fat JAR in target/. -DskipTests avoids running tests twice.
+      - name: Build JAR
+        working-directory: restaurant-service
+        run: mvn package -DskipTests -B --no-transfer-progress
+
+      # ── 6. Configure AWS credentials via GitHub OIDC ───────────────────────────
+      # Exchanges the GitHub OIDC JWT for temporary AWS credentials by assuming
+      # AWS_ROLE_TO_ASSUME. No long-lived AWS keys are stored in GitHub — the
+      # credentials expire automatically after the job completes.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:    ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region:        ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+
+      # ── 7. Login to Amazon ECR ─────────────────────────────────────────────────
+      # Authenticates the Docker daemon against the private ECR registry so that
+      # subsequent docker push commands succeed. The registry URL is exposed as
+      # steps.ecr-login.outputs.registry for use in later steps.
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── 8 + 9 + 10. Build, tag, and push Docker image ─────────────────────────
+      # Two tags are pushed on every deploy:
+      #   :latest   → always points to the most recent main-branch build
+      #   :<sha>    → immutable; the ECS task definition references this tag so
+      #               rollbacks are deterministic (just redeploy an old task def)
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG:    ${{ github.sha }}
+        run: |
+          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY
+
+          docker build \
+            --file restaurant-service/Dockerfile \
+            --tag  $IMAGE_URI:$IMAGE_TAG \
+            --tag  $IMAGE_URI:latest \
+            restaurant-service
+
+          docker push $IMAGE_URI:$IMAGE_TAG
+          docker push $IMAGE_URI:latest
+
+          # Pass the SHA-tagged URI to the render step below
+          echo "image=$IMAGE_URI:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      # ── 11 + 12. Render updated ECS task definition ────────────────────────────
+      # Reads the JSON task definition file from the repo, replaces the image URI
+      # for the named container, and writes a new (temporary) task definition file.
+      # Using the SHA tag here ensures ECS pulls the exact image built in this run.
+      - name: Render ECS task definition with new image
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.TASK_DEF_FILE }}
+          container-name:  ${{ env.CONTAINER_NAME }}
+          image:           ${{ steps.build-image.outputs.image }}
+
+      # ── 13 + 14. Deploy to ECS and wait for stability ─────────────────────────
+      # Registers the rendered task definition as a new revision, then updates
+      # the ECS service to use it. wait-for-service-stability blocks until ECS
+      # reports the service as stable (all desired tasks healthy) or fails the
+      # workflow if the deployment does not stabilise within the timeout.
+      - name: Deploy to ECS Fargate
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition:          ${{ steps.render-task-def.outputs.task-definition }}
+          service:                  ${{ env.ECS_SERVICE }}
+          cluster:                  ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
