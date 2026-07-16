@@ -17,7 +17,7 @@ permissions:
 
 # ─── Top-level env (non-secret, reused across steps) ───────────────────────────
 env:
-  AWS_REGION:         ${{ vars.AWS_REGION }}
+  AWS_REGION:         us-east-2
   AWS_ACCOUNT_ID:     ${{ vars.AWS_ACCOUNT_ID }}
   ECR_REPOSITORY:     restaurant-service
   ECS_CLUSTER:        food-delivery-dev-cluster

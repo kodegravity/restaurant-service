@@ -9,7 +9,7 @@
   "containerDefinitions": [
     {
       "name": "restaurant-service",
-      "image": "YOUR_ACCOUNT_ID.dkr.ecr.ca-central-1.amazonaws.com/restaurant-service:latest",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/restaurant-service:latest",
       "essential": true,
       "portMappings": [
         {
@@ -18,19 +18,19 @@
         }
       ],
       "environment": [
-        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
-        { "name": "DB_PORT", "value": "5432" },
-        { "name": "DB_NAME", "value": "restaurant_db" }
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" }
       ],
       "secrets": [
-        { "name": "DB_HOST",                 "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/db-host" },
-        { "name": "DB_USERNAME",             "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/db-username" },
-        { "name": "DB_PASSWORD",             "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/db-password" },
-        { "name": "KAFKA_BOOTSTRAP_SERVERS", "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/kafka-bootstrap-servers" },
-        { "name": "REDIS_HOST",              "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/redis-host" },
-        { "name": "REDIS_PORT",              "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/redis-port" },
-        { "name": "JWT_ISSUER_URI",          "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/jwt-issuer-uri" },
-        { "name": "CORS_ALLOWED_ORIGINS",    "valueFrom": "arn:aws:ssm:ca-central-1:YOUR_ACCOUNT_ID:parameter/restaurant-service/cors-allowed-origins" }
+        { "name": "DB_HOST",                 "valueFrom": "arn:aws:secretsmanager:us-east-2:YOUR_ACCOUNT_ID:secret:food-delivery/dev/db/credentials:host::" },
+        { "name": "DB_USERNAME",             "valueFrom": "arn:aws:secretsmanager:us-east-2:YOUR_ACCOUNT_ID:secret:food-delivery/dev/db/credentials:username::" },
+        { "name": "DB_PASSWORD",             "valueFrom": "arn:aws:secretsmanager:us-east-2:YOUR_ACCOUNT_ID:secret:food-delivery/dev/db/credentials:password::" },
+        { "name": "DB_PORT",                 "valueFrom": "arn:aws:secretsmanager:us-east-2:YOUR_ACCOUNT_ID:secret:food-delivery/dev/db/credentials:port::" },
+        { "name": "DB_NAME",                 "valueFrom": "arn:aws:secretsmanager:us-east-2:YOUR_ACCOUNT_ID:secret:food-delivery/dev/db/credentials:dbname::" },
+        { "name": "KAFKA_BOOTSTRAP_SERVERS", "valueFrom": "arn:aws:ssm:us-east-2:YOUR_ACCOUNT_ID:parameter/restaurant-service/kafka-bootstrap-servers" },
+        { "name": "REDIS_HOST",              "valueFrom": "arn:aws:ssm:us-east-2:YOUR_ACCOUNT_ID:parameter/restaurant-service/redis-host" },
+        { "name": "REDIS_PORT",              "valueFrom": "arn:aws:ssm:us-east-2:YOUR_ACCOUNT_ID:parameter/restaurant-service/redis-port" },
+        { "name": "JWT_ISSUER_URI",          "valueFrom": "arn:aws:ssm:us-east-2:YOUR_ACCOUNT_ID:parameter/restaurant-service/jwt-issuer-uri" },
+        { "name": "CORS_ALLOWED_ORIGINS",    "valueFrom": "arn:aws:ssm:us-east-2:YOUR_ACCOUNT_ID:parameter/restaurant-service/cors-allowed-origins" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"],
@@ -43,7 +43,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group":         "/ecs/restaurant-service",
-          "awslogs-region":        "ca-central-1",
+          "awslogs-region":        "us-east-2",
           "awslogs-stream-prefix": "ecs"
         }
       }
